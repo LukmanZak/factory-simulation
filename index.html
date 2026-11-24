@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Intralogistics Digital Twin — Pabrik</title>
+  <style>
+    :root {
+      --bg: #0b1220; --panel: rgba(12, 18, 30, 0.84); --line: rgba(148, 163, 184, 0.2);
+      --ink: #e5eaf2; --mute: #94a3b8; --acc: #5cc4ff; --acc2: #2d7ff0; --warn: #f5b942; --bad: #f87171; --ok: #34d399;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    html, body { height: 100%; }
+    body { overflow: hidden; background: var(--bg); color: var(--ink); user-select: none; }
+    #canvas-container { position: fixed; inset: 0; }
+    #canvas-container canvas { display: block; }
+
+    .panel {
+      position: absolute; background: var(--panel); backdrop-filter: blur(14px);
+      border: 1px solid var(--line); border-radius: 12px; padding: 12px 13px;
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45); z-index: 10;
+    }
+    body.hud-off .panel, body.hud-off #cab-hud { display: none; }
+    #top-left { top: 12px; left: 12px; width: 288px; max-height: calc(100vh - 24px); overflow-y: auto; }
+    #top-right { top: 12px; right: 12px; width: 318px; max-height: calc(100vh - 76px); overflow-y: auto; }
+    #bottom-bar { bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; padding: 8px 16px; white-space: nowrap; }
+    .panel::-webkit-scrollbar { width: 6px; } .panel::-webkit-scrollbar-thumb { background: rgba(148,163,184,.3); border-radius: 3px; }
+
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    h1 { font-size: 13px; font-weight: 700; color: var(--acc); letter-spacing: .4px; text-transform: uppercase; }
+    .collapse-btn { width: 24px; height: 24px; padding: 0; text-align: center; font-size: 15px; line-height: 20px; border-radius: 6px; flex: none; }
+    .panel.collapsed .panel-body { display: none; }
+    .subtitle { font-size: 10.5px; color: var(--mute); margin: 3px 0 8px; line-height: 1.35; }
+    .sec-title { font-size: 10.5px; font-weight: 700; color: #cbd5e1; text-transform: uppercase; letter-spacing: .6px; margin: 11px 0 6px; border-bottom: 1px solid var(--line); padding-bottom: 3px; }
+
+    .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+    .btn-full { grid-column: 1 / -1; }
+    button { background: rgba(30, 41, 59, 0.9); color: #cbd5e1; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 11px; font-weight: 500; cursor: pointer; transition: all .14s ease; text-align: left; }
+    button:hover { background: rgba(51, 65, 85, 0.95); border-color: var(--acc); color: #fff; }
+    button.active { background: linear-gradient(135deg, #0a84c9, var(--acc2)); border-color: #8ad7ff; color: #fff; font-weight: 600; box-shadow: 0 0 10px rgba(92, 196, 255, .3); }
+    button.warn-btn { background: rgba(180, 83, 9, 0.32); border-color: rgba(245, 158, 11, 0.45); color: #fde68a; text-align: center; font-weight: 600; }
+    button.warn-btn:hover { background: rgba(217, 119, 6, 0.5); color: #fff; }
+
+    .tabs { display: flex; gap: 4px; margin: 8px 0 10px; }
+    .tab-btn { flex: 1; text-align: center; padding: 6px 4px; font-size: 10.5px; font-weight: 600; background: rgba(30, 41, 59, 0.6); }
+    .tab-btn.active { background: #0a84c9; color: #fff; border-color: var(--acc); }
+    .tab-pane { display: none; } .tab-pane.active { display: block; }
+
+    .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .kpi-card { background: rgba(30, 41, 59, 0.55); border: 1px solid rgba(148, 163, 184, 0.14); border-radius: 8px; padding: 7px 9px; }
+    .kpi-lbl { font-size: 9.5px; color: var(--mute); text-transform: uppercase; letter-spacing: .4px; }
+    .kpi-val { font-size: 16px; font-weight: 700; color: #f8fafc; margin-top: 1px; }
+    .kpi-sub { font-size: 9.5px; color: var(--acc); }
+
+    .bar-row { margin-top: 7px; font-size: 11px; }
+    .bar-head { display: flex; justify-content: space-between; margin-bottom: 3px; }
+    .bar-bg { height: 7px; background: #1e293b; border-radius: 4px; overflow: hidden; }
+    .bar-fill { height: 100%; background: var(--acc); transition: width .25s, background .25s; }
+    .badge-alert { display: inline-block; padding: 1px 5px; border-radius: 4px; font-size: 9.5px; font-weight: 700; background: #ef4444; color: #fff; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+
+    .fleet-card { background: rgba(30, 41, 59, 0.55); border: 1px solid rgba(148, 163, 184, 0.14); border-radius: 8px; padding: 8px; margin-bottom: 7px; font-size: 11px; line-height: 1.5; }
+    .fleet-head { display: flex; justify-content: space-between; font-weight: 700; color: #f8fafc; margin-bottom: 3px; }
+
+    .event-log { max-height: 155px; overflow-y: auto; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--line); border-radius: 6px; padding: 6px; font-family: ui-monospace, monospace; font-size: 10px; line-height: 1.45; }
+    .log-warn { color: #fbbf24; } .log-danger { color: var(--bad); font-weight: 600; } .log-info { color: var(--acc); }
+
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; font-size: 11.5px; color: #cbd5e1; }
+    .kbd { display: inline-block; padding: 1px 5px; font-size: 10px; font-weight: 700; background: #1e293b; border: 1px solid #475569; border-radius: 4px; color: #f8fafc; margin-right: 2px; }
+
+    /* Label zona: kecil dan rapi, tidak menutupi pemandangan */
+    #labels-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 5; }
+    .zone-label {
+      position: absolute; transform: translate(-50%, -100%); display: flex; align-items: center; gap: 5px;
+      background: rgba(10, 16, 27, 0.78); border: 1px solid rgba(92, 196, 255, 0.45);
+      color: #eef3fa; padding: 2px 7px 2px 6px; border-radius: 999px; font-size: 10px; font-weight: 600; white-space: nowrap;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, .35); transition: opacity .15s;
+    }
+    .zone-label::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--acc); flex: none; }
+    .zone-label.wp { border-color: rgba(250, 204, 21, .55); color: #fef08a; font-size: 9px; padding: 1px 6px; }
+    .zone-label.wp::before { background: #facc15; }
+    .zone-label.safety { border-color: rgba(52, 211, 153, .6); color: #bbf7d0; }
+    .zone-label.safety::before { background: var(--ok); }
+    .zone-label b { color: var(--acc); font-weight: 700; }
+
+    #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 10px; height: 10px; border: 2px solid rgba(255, 255, 255, .8); border-radius: 50%; pointer-events: none; display: none; z-index: 8; }
+    #cab-hud { position: absolute; bottom: 68px; left: 50%; transform: translateX(-50%); background: rgba(10, 16, 27, .85); border: 1px solid var(--acc); border-radius: 10px; padding: 8px 18px; display: none; gap: 20px; font-family: ui-monospace, monospace; font-size: 12px; z-index: 9; }
+
+    #loadchip { position: absolute; left: 12px; bottom: 12px; z-index: 12; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 7px 11px; font-size: 11px; color: #cbd5e1; display: flex; flex-direction: column; gap: 5px; min-width: 210px; transition: opacity .6s; backdrop-filter: blur(10px); }
+    #loadchip .lb { height: 4px; background: #1e293b; border-radius: 3px; overflow: hidden; }
+    #loadchip .lb i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #0a84c9, var(--acc)); transition: width .25s; }
+    #loadchip.done { opacity: 0; pointer-events: none; }
+    #credit { position: absolute; right: 14px; bottom: 14px; z-index: 11; font-size: 10px; color: rgba(226, 232, 240, .7); text-shadow: 0 1px 3px rgba(0,0,0,.8); pointer-events: none; text-align: right; line-height: 1.4; }
+    #credit a { color: inherit; }
+    #fatal { position: absolute; inset: 0; z-index: 99; display: none; align-items: center; justify-content: center; text-align: center; padding: 30px; background: #0b1220; color: #fca5a5; font-size: 14px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+  <div id="labels-layer"></div>
+  <div id="crosshair"></div>
+  <div id="fatal"></div>
+  <div id="cab-hud">
+    <div>UNIT: <strong style="color:#5cc4ff;">FL-01</strong></div>
+    <div>SPEED: <strong id="cab-spd">0.0</strong> km/h</div>
+    <div>BATTERY: <strong id="cab-bat">100%</strong></div>
+    <div>LOAD: <strong id="cab-load">EMPTY</strong></div>
+  </div>
+  <div id="loadchip"><div id="loadtxt">Memuat aset nyata…</div><div class="lb"><i id="loadbar"></i></div></div>
+  <div id="credit">Aset nyata: Poly Haven (CC0) · three.js<br><span id="credit-st"></span></div>
+
+  <!-- PANEL KIRI -->
+  <div id="top-left" class="panel">
+    <div class="panel-head"><h1>Intralogistics Digital Twin</h1><button class="collapse-btn" title="Lipat panel" onclick="togglePanel('top-left')">–</button></div>
+    <div class="panel-body">
+      <div class="subtitle">Pabrik dan gudang: zona, jalur, waypoint, armada, kapasitas dan safety.</div>
+
+      <div class="sec-title">1. Perspektif Kamera</div>
+      <div class="btn-grid">
+        <button id="cam-orbit" class="active btn-full" onclick="setCameraMode('orbit')">Overview / Facility Layout (Orbit)</button>
+        <button id="cam-tp-op" onclick="setCameraMode('tp_operator')">3rd-Person: Operator</button>
+        <button id="cam-fp-walk" onclick="setCameraMode('fp_walk')">1st-Person: Jalan (WASD)</button>
+        <button id="cam-tp-fl1" onclick="setCameraMode('tp_fl1')">3rd-Person: FL-01</button>
+        <button id="cam-fp-fl1" onclick="setCameraMode('fp_fl1')">1st-Person: Kabin FL-01</button>
+        <button id="cam-tp-fl2" onclick="setCameraMode('tp_fl2')">3rd-Person: FL-02</button>
+        <button id="cam-tp-amr" onclick="setCameraMode('tp_amr')">3rd-Person: AMR-01</button>
+        <button id="cam-fp-amr" class="btn-full" onclick="setCameraMode('fp_amr')">1st-Person: Kamera LiDAR AMR-01</button>
+      </div>
+
+      <div class="sec-title">2. Layer Visual</div>
+      <div class="toggle-row"><span>Label zona</span><input type="checkbox" id="chk-labels" checked onchange="toggleLabels(this.checked)" /></div>
+      <div class="toggle-row"><span>Jaringan node / waypoint (WP)</span><input type="checkbox" id="chk-nodes" onchange="toggleNodes(this.checked)" /></div>
+      <div class="toggle-row"><span>Vektor aliran material</span><input type="checkbox" id="chk-flow" onchange="toggleFlow(this.checked)" /></div>
+      <div class="toggle-row"><span>Atap dan dinding penuh</span><select id="sel-shell" onchange="setShellMode(this.value)" style="background:#1e293b;color:#e5eaf2;border:1px solid var(--line);border-radius:6px;padding:2px 4px;font-size:11px;"><option value="auto">Otomatis</option><option value="on">Selalu tampil</option><option value="off">Selalu sembunyi</option></select></div>
+      <div class="toggle-row" id="pointer-lock-row" style="display:none;"><span>Kunci mouse (FPS)</span><button onclick="requestFPSLock()" style="padding:3px 8px;">Aktifkan PointerLock</button></div>
+
+      <div class="sec-title">3. Skenario Stress-Test</div>
+      <div class="btn-grid">
+        <button class="warn-btn btn-full" onclick="triggerTruckSurge()">+ Simulasi Truck Surge (uji overflow dan macet)</button>
+        <button class="warn-btn btn-full" onclick="forceChargeFL1()">Paksa FL-01 charging ke CHG-BAY</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANEL KANAN -->
+  <div id="top-right" class="panel">
+    <div class="panel-head"><h1>Analitik &amp; Telemetri</h1><button class="collapse-btn" title="Lipat panel" onclick="togglePanel('top-right')">–</button></div>
+    <div class="panel-body">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('cap', this)">Kapasitas</button>
+        <button class="tab-btn" onclick="switchTab('fleet', this)">Armada &amp; Siklus</button>
+        <button class="tab-btn" onclick="switchTab('safety', this)">Macet &amp; Safety</button>
+      </div>
+
+      <div id="tab-cap" class="tab-pane active">
+        <div class="kpi-grid">
+          <div class="kpi-card"><div class="kpi-lbl">Throughput Total</div><div class="kpi-val" id="kpi-tp">0</div><div class="kpi-sub">unit selesai</div></div>
+          <div class="kpi-card"><div class="kpi-lbl">Siklus Rata-rata</div><div class="kpi-val" id="kpi-cycle">0.0s</div><div class="kpi-sub">per trip FL</div></div>
+        </div>
+        <div class="bar-row"><div class="bar-head"><span><strong>RM-WH</strong> (Gudang Bahan Baku)</span><span id="txt-rm">22 / 36</span></div><div class="bar-bg"><div id="bar-rm" class="bar-fill" style="width:61%; background:#3b82f6;"></div></div></div>
+        <div class="bar-row"><div class="bar-head"><span><strong>FG-WH</strong> (Gudang Barang Jadi)</span><span id="txt-fg">10 / 36</span></div><div class="bar-bg"><div id="bar-fg" class="bar-fill" style="width:28%; background:#10b981;"></div></div></div>
+        <div class="bar-row"><div class="bar-head"><span><strong>STG-IN</strong> (Transit Dock Masuk) <span id="ovf-in" class="badge-alert" style="display:none;">OVERFLOW</span></span><span id="txt-stgin">3 / 6</span></div><div class="bar-bg"><div id="bar-stgin" class="bar-fill" style="width:50%;"></div></div></div>
+        <div class="bar-row"><div class="bar-head"><span><strong>STG-OUT</strong> (Transit Dock Keluar) <span id="ovf-out" class="badge-alert" style="display:none;">OVERFLOW</span></span><span id="txt-stgout">2 / 6</span></div><div class="bar-bg"><div id="bar-stgout" class="bar-fill" style="width:33%;"></div></div></div>
+        <div class="bar-row"><div class="bar-head"><span><strong>WIP-BUF-01/02</strong> (Antar Mesin)</span><span id="txt-wip">0 / 8</span></div><div class="bar-bg"><div id="bar-wip" class="bar-fill" style="width:0%; background:#f59e0b;"></div></div></div>
+      </div>
+
+      <div id="tab-fleet" class="tab-pane">
+        <div class="fleet-card"><div class="fleet-head"><span>FL-01 (Inbound • Cap 2000kg)</span><span id="fl1-status" style="color:#5cc4ff;">ACTIVE</span></div><div>Kecepatan: <strong id="fl1-spd">0</strong> km/h | Baterai: <strong id="fl1-bat">100%</strong></div><div>Jarak isi: <strong id="fl1-load">0</strong>m | Kosong: <strong id="fl1-emp">0</strong>m (<span id="fl1-emp-pct">0%</span>)</div></div>
+        <div class="fleet-card"><div class="fleet-head"><span>FL-02 (Outbound • Cap 2000kg)</span><span id="fl2-status" style="color:#34d399;">ACTIVE</span></div><div>Kecepatan: <strong id="fl2-spd">0</strong> km/h | Baterai: <strong id="fl2-bat">100%</strong></div><div>Jarak isi: <strong id="fl2-load">0</strong>m | Kosong: <strong id="fl2-emp">0</strong>m (<span id="fl2-emp-pct">0%</span>)</div></div>
+        <div class="fleet-card"><div class="fleet-head"><span>Armada AMR-01..03 (Cap 500kg)</span><span id="amr-status" style="color:#f5b942;">OK</span></div><div>Total jarak armada: <strong id="amr-dist">0</strong>m | Konveyor: <strong>CONV-01..03</strong></div></div>
+      </div>
+
+      <div id="tab-safety" class="tab-pane">
+        <div class="kpi-grid" style="margin-bottom:8px;">
+          <div class="kpi-card"><div class="kpi-lbl">Kejadian Macet</div><div class="kpi-val" id="kpi-cong" style="color:#fbbf24;">0</div><div class="kpi-sub">Wait: <span id="kpi-wait">0.0s</span></div></div>
+          <div class="kpi-card"><div class="kpi-lbl">Near-Miss Safety</div><div class="kpi-val" id="kpi-nearmiss" style="color:#f87171;">0</div><div class="kpi-sub">Blind-spot / cross</div></div>
+        </div>
+        <div class="sec-title" style="margin-top:4px;">Log Traffic &amp; Keselamatan (Live)</div>
+        <div id="event-log" class="event-log"><div class="log-info">[00:00] Sistem analitik aktif. Memantau WP-INT &amp; PED-PATH...</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BAR BAWAH -->
+  <div id="bottom-bar" class="panel">
+    <div style="display:flex; align-items:center; gap:8px; font-size:11.5px;">
+      <span>Kecepatan:</span>
+      <input type="range" id="sim-speed" min="0" max="4" step="0.5" value="1" oninput="setSimSpeed(this.value)" style="accent-color:#5cc4ff;" />
+      <strong id="speed-val" style="color:#5cc4ff; min-width:30px;">1.0x</strong>
+    </div>
+    <div style="height:16px; width:1px; background:rgba(148,163,184,0.3);"></div>
+    <div id="controls-hint" style="font-size:11px; color:#cbd5e1;"><strong>Orbit:</strong> Drag kiri = putar | Scroll = zoom | Drag kanan = geser | <span class="kbd">H</span> sembunyikan panel</div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/RGBELoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="js/manifest.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/hall.js"></script>
+  <script src="js/zones.js"></script>
+  <script src="js/people.js"></script>
+  <script src="js/actors.js"></script>
+  <script src="js/line.js"></script>
+  <script src="js/sim.js"></script>
+  <script src="js/ui.js"></script>
+</body>
+</html>
